@@ -57,7 +57,7 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
     fileprivate var reconnectUUIDs = [UUID]()
     fileprivate var disposeBag = DisposeBag()
     
-    override private init() {
+    override init() {
         super.init()
         self.manager = CBCentralManager(delegate: self, queue: nil)
     }
@@ -172,20 +172,22 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
     }
     
     fileprivate func createBleDevice(_ peripheral: CBPeripheral) -> BleDevice? {
-        let device = bleDeviceDelegate.createBleDeviceOuter(peripheral: peripheral)
-        if let _device = device {
-            deviceDic[peripheral] = _device
-            _device.connectionStateObservable
-                .subscribe { [weak self] (event) in
-                    switch event {
-                    case .next(let state):
-                        self?.connectionStateSubject.onNext((bleDevice: _device, connectionState: state))
-                    default:
-                        break
-                    }
-                }
-                .disposed(by: disposeBag)
+        guard let device = bleDeviceDelegate.createBleDeviceOuter(peripheral: peripheral) else {
+            return nil
         }
+        
+        device.bluetoothManager = self
+        deviceDic[peripheral] = device
+        device.connectionStateObservable
+            .subscribe { [weak self] (event) in
+                switch event {
+                case .next(let state):
+                    self?.connectionStateSubject.onNext((bleDevice: device, connectionState: state))
+                default:
+                    break
+                }
+            }
+            .disposed(by: disposeBag)
         return device
     }
     

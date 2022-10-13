@@ -122,6 +122,7 @@ open class BleDevice: NSObject {
     fileprivate var discoverCompletable: Completable {
         return discoverSubject.ignoreElements().asCompletable()
     }
+    var bluetoothManager: BluetoothManager!
 
     public required init(_ peripheral: CBPeripheral) {
         self.peripheral = peripheral
@@ -132,7 +133,7 @@ open class BleDevice: NSObject {
     
     public func connect(autoConnect: Bool = false) -> Completable {
         var dispose = true
-        return BluetoothManager.instance.connectDevice(peripheral: peripheral, autoConnect: autoConnect)
+        return bluetoothManager.connectDevice(peripheral: peripheral, autoConnect: autoConnect)
             .concat(discoverCompletable.do(onSubscribe: {
                 self.discover()
             }))
@@ -155,7 +156,7 @@ open class BleDevice: NSObject {
     public func reconnect() -> Completable {
         return Single<Bool>.deferred { [weak self] in
             if let this = self {
-                return Single.just(BluetoothManager.instance.getReconnectFlag(peripheral: this.peripheral))
+                return Single.just(this.bluetoothManager.getReconnectFlag(peripheral: this.peripheral))
             } else {
                 return Single.error(RxError.noElements)
             }
@@ -179,7 +180,7 @@ open class BleDevice: NSObject {
     }
     
     fileprivate func disconnectCompletable() -> Completable {
-        return BluetoothManager.instance.disconnectDevice(peripheral: peripheral)
+        return bluetoothManager.disconnectDevice(peripheral: peripheral)
             .do(onSubscribe: {
                 self.connectionState = .DISCONNECTING
             })
