@@ -17,6 +17,8 @@
 		EE236D4624A60D330012C04E /* FirstOrError.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE236D4324A60D330012C04E /* FirstOrError.swift */; };
 		EE3AB1A724FC80F600886D42 /* AlgorigoBleLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE3AB1A524FC80F600886D42 /* AlgorigoBleLibrary.swift */; };
 		EE3AB1A824FC80F600886D42 /* BluetoothManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE3AB1A624FC80F600886D42 /* BluetoothManager.swift */; };
+		EEB8C89F298A47C8008100C7 /* ScanInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB8C89E298A47C8008100C7 /* ScanInfo.swift */; };
+		EEB8C8A1298A53B5008100C7 /* Array+Unique.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB8C8A0298A53B5008100C7 /* Array+Unique.swift */; };
 		EEFF49602985826100E664D7 /* RxBlocking in Frameworks */ = {isa = PBXBuildFile; productRef = EEFF495F2985826100E664D7 /* RxBlocking */; };
 /* End PBXBuildFile section */
 
@@ -41,6 +43,8 @@
 		EE236D4324A60D330012C04E /* FirstOrError.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FirstOrError.swift; sourceTree = "<group>"; };
 		EE3AB1A524FC80F600886D42 /* AlgorigoBleLibrary.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AlgorigoBleLibrary.swift; sourceTree = "<group>"; };
 		EE3AB1A624FC80F600886D42 /* BluetoothManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BluetoothManager.swift; sourceTree = "<group>"; };
+		EEB8C89E298A47C8008100C7 /* ScanInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanInfo.swift; sourceTree = "<group>"; };
+		EEB8C8A0298A53B5008100C7 /* Array+Unique.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Array+Unique.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -95,6 +99,7 @@
 				1143C5AC251C43F60030A119 /* InitializableBleDevice.swift */,
 				EE236D4324A60D330012C04E /* FirstOrError.swift */,
 				EE236CC724A5CA780012C04E /* Info.plist */,
+				EEB8C89E298A47C8008100C7 /* ScanInfo.swift */,
 			);
 			path = AlgorigoBleLibrary;
 			sourceTree = "<group>";
@@ -111,6 +116,7 @@
 		EEFF495B2985812500E664D7 /* util */ = {
 			isa = PBXGroup;
 			children = (
+				EEB8C8A0298A53B5008100C7 /* Array+Unique.swift */,
 			);
 			path = util;
 			sourceTree = "<group>";
@@ -240,7 +246,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EEB8C89F298A47C8008100C7 /* ScanInfo.swift in Sources */,
 				EE3AB1A724FC80F600886D42 /* AlgorigoBleLibrary.swift in Sources */,
+				EEB8C8A1298A53B5008100C7 /* Array+Unique.swift in Sources */,
 				EE236D4624A60D330012C04E /* FirstOrError.swift in Sources */,
 				1143C5AD251C43F60030A119 /* InitializableBleDevice.swift in Sources */,
 				EE3AB1A824FC80F600886D42 /* BluetoothManager.swift in Sources */,

@@ -70,7 +70,6 @@ class ViewController: UIViewController {
     private func startScan() {
         if disposableAll == nil {
             disposableAll = BluetoothManager.instance.scanDevice()
-                .subscribe(on: ConcurrentDispatchQueueScheduler(qos: .background))
                 .observe(on: MainScheduler.instance)
                 .do(onSubscribe: { [weak self] in
                     self?.devicesAll = []
@@ -78,7 +77,7 @@ class ViewController: UIViewController {
                 })
                 .subscribe(onNext: { [weak self] (devices) in
 //                    print("scanDevice onNextAll:\(devices.map { $0.getName() ?? $0.getIdentifier()})")
-                    self?.devicesAll = devices
+                    self?.devicesAll = devices.map({ $0.device })
                     self?.allTableView.reloadData()
                 }, onError: { (error) in
                     print("scanDevice onError:\(error)")
@@ -94,7 +93,6 @@ class ViewController: UIViewController {
     private func startScanWithServices() {
         if disposableDevice == nil {
             disposableDevice = BluetoothManager.instance.scanDevice(withServices: [ViewController.UUID_SERVICE])
-                .subscribe(on: ConcurrentDispatchQueueScheduler(qos: .background))
                 .observe(on: MainScheduler.instance)
                 .do(onSubscribe: { [weak self] in
                     self?.devicesDevice = []
@@ -102,7 +100,7 @@ class ViewController: UIViewController {
                 })
                 .subscribe(onNext: { [weak self] (devices) in
 //                    print("scanDevice onNext:\(devices.map { $0.getName() ?? $0.getIdentifier()})")
-                    self?.devicesDevice = devices
+                    self?.devicesDevice = devices.map({ $0.device })
                     self?.deviceTableView.reloadData()
                 }, onError: { (error) in
                     print("scanDevice onError:\(error)")
@@ -169,7 +167,6 @@ extension ViewController : DeviceTableViewCellDelegate {
         switch device.connectionState {
         case .connected:
             device.disconnect()
-            self.allTableView.reloadData()
         case .disconnected:
             _ = device.connect()
                 .subscribe(on: ConcurrentDispatchQueueScheduler(qos: .background))

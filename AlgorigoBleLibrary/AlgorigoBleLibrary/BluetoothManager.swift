@@ -21,7 +21,7 @@ extension BleDeviceDelegate {
     }
 }
 
-public class BluetoothManager : NSObject, CBCentralManagerDelegate {
+public class BluetoothManager : NSObject {
     
     class RxBluetoothError : Error {
         let error: Error?
@@ -30,12 +30,12 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
         }
     }
     
-    enum BluetoothCentralManagerError : Error {
-        case BluetoothUnknownError
-        case BluetoothResettingError
-        case BluetoothUnsupportedError
-        case BluetoothUnauthorizedError
-        case BluetoothPowerOffError
+    enum BluetoothManagerError : Error {
+        case unknownError
+        case resettingError
+        case unsupportedError
+        case unauthorizedError
+        case powerOffError
     }
     
     public class DefaultBleDeviceDelegate : BleDeviceDelegate {
@@ -51,7 +51,7 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
     public var bleDeviceDelegate: BleDeviceDelegate = DefaultBleDeviceDelegate()
     fileprivate let initializedSubject = ReplaySubject<CBManagerState>.create(bufferSize: 1)
     fileprivate let connectionStateSubject = PublishSubject<(bleDevice: BleDevice, connectionState: BleDevice.ConnectionState)>()
-    fileprivate var scanSubjects = [([String]?, PublishSubject<CBPeripheral>)]()
+    fileprivate var scanRelay = PublishRelay<(CBPeripheral, ScanInfo)>()
     fileprivate var connectSubjects = [CBPeripheral: PublishSubject<Any>]()
     fileprivate var disconnectSubjects = [CBPeripheral: PublishSubject<Bool>]()
     fileprivate var disposeBag = DisposeBag()
@@ -65,63 +65,43 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
         self.bleDeviceDelegate = bleDeviceDelegate
     }
     
-    public func scanDevice(withServices services: [String]? = nil) -> Observable<[BleDevice]> {
-        var bleDeviceList = [BleDevice]()
-        var lastCount = 0
+    public func scanDevice(withServices services: [String]? = nil) -> Observable<[(device: BleDevice, scanInfo: ScanInfo)]> {
+        var count = 0
         return scanDeviceInner(withServices: services)
-            .map { (peripheral) -> [BleDevice] in
-                let device = self.onBluetoothDeviceFound(peripheral)
-                if let _device = device {
-                    if !bleDeviceList.contains(where: { (a) -> Bool in _device == a }) {
-                        bleDeviceList.append(_device)
+            .compactMap({ tuple -> [(device: BleDevice, scanInfo: ScanInfo)]? in
+                guard let device = self.onBluetoothDeviceFound(tuple.0) else {
+                    return nil
+                }
+                return [(device: device, scanInfo: tuple.1)]
+            })
+            .scan([], accumulator: { prev, next -> [(device: BleDevice, scanInfo: ScanInfo)] in
+                prev + next.filter({ (device, scanInfo) in
+                    !prev.contains { tuple in
+                        tuple.device.getIdentifier() == device.getIdentifier()
                     }
-                }
-                return bleDeviceList
-            }
-            .filter { (bleDevices) -> Bool in
-                if lastCount < bleDevices.count {
-                    lastCount = bleDevices.count
-                    return true
-                } else {
-                    return false
-                }
-            }
+                })
+            })
+            .filter({ list in
+                let newExist = list.count != count
+                count = list.count
+                return newExist
+            })
+            .subscribe(on: ConcurrentDispatchQueueScheduler(qos: .background))
     }
     
-    public func scanDevice(withServices services: [String]? = nil, intervalSec: Int) -> Observable<[BleDevice]> {
-        return scanDevice(withServices: services)
-            .take(until: Observable<Int>.timer(DispatchTimeInterval.seconds(intervalSec), scheduler: ConcurrentDispatchQueueScheduler(qos: .background)))
-    }
-    
-    private func scanDeviceInner(withServices services: [String]? = nil) -> Observable<CBPeripheral> {
+    private func scanDeviceInner(withServices services: [String]? = nil) -> Observable<(CBPeripheral, ScanInfo)> {
         return checkBluetoothStatus()
-            .andThen(Observable.deferred({ [unowned self] () -> Observable<CBPeripheral> in
-                let publishSubject = PublishSubject<CBPeripheral>()
-                self.scanSubjects.append((services, publishSubject))
+            .andThen(Observable.deferred({ [unowned self] () -> Observable<(CBPeripheral, ScanInfo)> in
                 let services = services?.map({ (uuidStr) -> CBUUID? in
                     CBUUID(string: uuidStr)
                 }).compactMap({ $0 })
                 self.manager.scanForPeripherals(withServices: services, options: [CBCentralManagerScanOptionAllowDuplicatesKey : true])
-                return publishSubject
-                    .do(onDispose: { [unowned self] in
-                        if !publishSubject.hasObservers {
-                            let index = self.scanSubjects.firstIndex(where: { (tuple) -> Bool in
-                                tuple.1 === publishSubject
-                            })!
-                            self.scanSubjects.remove(at: index)
-                            if scanSubjects.count == index {
-                                if scanSubjects.count > 0 {
-                                    let lastServices = self.scanSubjects.last?.0?.map({ (uuidStr) -> CBUUID? in
-                                        CBUUID(string: uuidStr)
-                                    }).compactMap({ $0 })
-                                    self.manager.scanForPeripherals(withServices: lastServices, options: [CBCentralManagerScanOptionAllowDuplicatesKey : true])
-                                } else {
-                                    self.manager.stopScan()
-                                }
-                            }
-                        }
-                    })
+                return self.scanRelay
+                    .asObservable()
             }))
+            .do(onDispose: { [unowned self] in
+                self.manager.stopScan()
+            })
     }
     
     public func retrieveDevice(identifiers: [UUID]) -> Single<[BleDevice]> {
@@ -147,19 +127,19 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
             .do(onNext: { (state) in
                 switch (state) {
                 case .unknown:
-                    throw BluetoothCentralManagerError.BluetoothUnknownError
+                    throw BluetoothManagerError.unknownError
                 case .resetting:
-                    throw BluetoothCentralManagerError.BluetoothResettingError
+                    throw BluetoothManagerError.resettingError
                 case .unsupported:
-                    throw BluetoothCentralManagerError.BluetoothUnsupportedError
+                    throw BluetoothManagerError.unsupportedError
                 case .unauthorized:
-                    throw BluetoothCentralManagerError.BluetoothUnauthorizedError
+                    throw BluetoothManagerError.unauthorizedError
                 case .poweredOff:
-                    throw BluetoothCentralManagerError.BluetoothPowerOffError
+                    throw BluetoothManagerError.powerOffError
                 case .poweredOn:
                     break
                 @unknown default:
-                    throw BluetoothCentralManagerError.BluetoothUnknownError
+                    throw BluetoothManagerError.unknownError
                 }
             })
             .first()
@@ -245,14 +225,16 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
             }
         }
     }
-    
+}
+
+extension BluetoothManager : CBCentralManagerDelegate {
     //CBCentralManagerDelegate Override Methods
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
         initializedSubject.onNext(central.state)
     }
 
     public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
-        scanSubjects.last?.1.onNext(peripheral)
+        scanRelay.accept((peripheral, ScanInfo(advertisementData: advertisementData, rssi: RSSI)))
     }
     
     public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
