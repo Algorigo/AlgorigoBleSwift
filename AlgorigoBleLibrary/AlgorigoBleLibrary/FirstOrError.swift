@@ -10,15 +10,13 @@ import Foundation
 import RxSwift
 
 public extension Observable {
-    class NoSuchElementError: Error {}
-    
     func firstOrError() -> Single<Element> {
         return first()
             .map { (value) -> Element in
                 if let _value = value {
                     return _value
                 } else {
-                    throw NoSuchElementError()
+                    throw RxError.noElements
                 }
             }
     }

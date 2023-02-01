@@ -163,10 +163,10 @@ extension RetrieveViewController: UITableViewDataSource, UITableViewDelegate {
 extension RetrieveViewController: DeviceTableViewCellDelegate {
     func handleConncectBtn(device: BleDevice) {
         switch device.connectionState {
-        case .CONNECTED:
+        case .connected:
             device.disconnect()
             self.deviceTableView.reloadData()
-        case .DISCONNECTED:
+        case .disconnected:
             _ = device.connect(autoConnect: true)
                 .subscribe(on: ConcurrentDispatchQueueScheduler(qos: .background))
                 .observe(on: MainScheduler.instance)

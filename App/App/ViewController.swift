@@ -167,10 +167,10 @@ extension ViewController : UITableViewDataSource, UITableViewDelegate {
 extension ViewController : DeviceTableViewCellDelegate {
     func handleConncectBtn(device: BleDevice) {
         switch device.connectionState {
-        case .CONNECTED:
+        case .connected:
             device.disconnect()
             self.allTableView.reloadData()
-        case .DISCONNECTED:
+        case .disconnected:
             _ = device.connect(autoConnect: false)
                 .subscribe(on: ConcurrentDispatchQueueScheduler(qos: .background))
                 .observe(on: MainScheduler.instance)

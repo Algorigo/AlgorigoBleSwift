@@ -176,6 +176,7 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
         if let _device = device {
             deviceDic[peripheral] = _device
             _device.connectionStateObservable
+                .skip(1)
                 .subscribe { [weak self] (event) in
                     switch event {
                     case .next(let state):
@@ -195,7 +196,7 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
     
     public func getConnectedDevices() -> [BleDevice] {
         return deviceDic.values.filter { (bleDevice) -> Bool in
-            bleDevice.connectionState == .CONNECTED
+            bleDevice.connectionState == .connected
         }
     }
     
@@ -203,7 +204,7 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
         return connectionStateSubject
     }
     
-    func connectDevice(peripheral: CBPeripheral, autoConnect: Bool = false) -> Completable {
+    internal func connectDevice(peripheral: CBPeripheral, autoConnect: Bool = false) -> Completable {
         return checkBluetoothStatus()
             .andThen(Completable.deferred({ () -> PrimitiveSequence<CompletableTrait, Never> in
                 if let subject = self.connectSubjects[peripheral] {

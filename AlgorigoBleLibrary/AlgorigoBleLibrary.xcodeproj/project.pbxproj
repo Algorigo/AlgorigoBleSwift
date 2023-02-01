@@ -17,6 +17,7 @@
 		EE236D4624A60D330012C04E /* FirstOrError.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE236D4324A60D330012C04E /* FirstOrError.swift */; };
 		EE3AB1A724FC80F600886D42 /* AlgorigoBleLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE3AB1A524FC80F600886D42 /* AlgorigoBleLibrary.swift */; };
 		EE3AB1A824FC80F600886D42 /* BluetoothManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE3AB1A624FC80F600886D42 /* BluetoothManager.swift */; };
+		EEFF49602985826100E664D7 /* RxBlocking in Frameworks */ = {isa = PBXBuildFile; productRef = EEFF495F2985826100E664D7 /* RxBlocking */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,6 +49,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				EE236CEE24A5CB6A0012C04E /* RxCocoa in Frameworks */,
+				EEFF49602985826100E664D7 /* RxBlocking in Frameworks */,
 				EE236CEC24A5CB6A0012C04E /* RxSwift in Frameworks */,
 				EE236CEA24A5CB6A0012C04E /* RxRelay in Frameworks */,
 			);
@@ -70,6 +72,7 @@
 				EE236CC524A5CA780012C04E /* AlgorigoBleLibrary */,
 				EE236CD024A5CA790012C04E /* AlgorigoBleLibraryTests */,
 				EE236CC424A5CA780012C04E /* Products */,
+				EEFF495E2985826100E664D7 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -85,6 +88,7 @@
 		EE236CC524A5CA780012C04E /* AlgorigoBleLibrary */ = {
 			isa = PBXGroup;
 			children = (
+				EEFF495B2985812500E664D7 /* util */,
 				EE3AB1A524FC80F600886D42 /* AlgorigoBleLibrary.swift */,
 				EE3AB1A624FC80F600886D42 /* BluetoothManager.swift */,
 				EE236D4024A60D280012C04E /* BleDevice.swift */,
@@ -102,6 +106,20 @@
 				EE236CD324A5CA790012C04E /* Info.plist */,
 			);
 			path = AlgorigoBleLibraryTests;
+			sourceTree = "<group>";
+		};
+		EEFF495B2985812500E664D7 /* util */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = util;
+			sourceTree = "<group>";
+		};
+		EEFF495E2985826100E664D7 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -135,6 +153,7 @@
 				EE236CE924A5CB6A0012C04E /* RxRelay */,
 				EE236CEB24A5CB6A0012C04E /* RxSwift */,
 				EE236CED24A5CB6A0012C04E /* RxCocoa */,
+				EEFF495F2985826100E664D7 /* RxBlocking */,
 			);
 			productName = AlgorigoBleLibrary;
 			productReference = EE236CC324A5CA780012C04E /* AlgorigoBleLibrary.framework */;
@@ -515,6 +534,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = EE236CE824A5CB6A0012C04E /* XCRemoteSwiftPackageReference "RxSwift" */;
 			productName = RxCocoa;
+		};
+		EEFF495F2985826100E664D7 /* RxBlocking */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EE236CE824A5CB6A0012C04E /* XCRemoteSwiftPackageReference "RxSwift" */;
+			productName = RxBlocking;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

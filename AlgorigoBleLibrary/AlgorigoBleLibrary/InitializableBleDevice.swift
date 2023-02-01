@@ -13,36 +13,18 @@ import CoreBluetooth
 
 open class InitializableBleDevice: BleDevice {
     
-    private var initialized = false
     private let initialzeRelay = PublishRelay<ConnectionState>()
     
     required public init(_ peripheral: CBPeripheral) {
         super.init(peripheral)
     }
     
+    private let initializeRelay = BehaviorRelay<Bool>(value: false)
     public override var connectionStateObservable: Observable<BleDevice.ConnectionState> {
-        return super.connectionStateObservable
-            .filter { [weak self] (connectionState) -> Bool in
-                connectionState != .CONNECTED || (self?.initialized ?? false)
-            }
-    }
-    public override var connectionState: BleDevice.ConnectionState {
-        get {
-            if super.connectionState == .CONNECTED && !initialized {
-                return .DISCOVERING
-            } else {
-                return super.connectionState
-            }
-        }
-        set {
-            super.connectionState = newValue
-        }
-    }
-    
-    public override var connected: Bool {
-        get {
-            super.connected && initialized
-        }
+        return Observable.combineLatest(super.connectionStateObservable, initializeRelay)
+            .map({ (connectionState, initialize) in
+                connectionState == .connected && !initialize ? .discovering : connectionState
+            })
     }
     
     public override func connect(autoConnect: Bool = false) -> Completable {
@@ -53,11 +35,13 @@ open class InitializableBleDevice: BleDevice {
     
     private func getInitialize() -> Completable {
         Completable.deferred { [weak self] () -> PrimitiveSequence<CompletableTrait, Never> in
-            self?.initialzeCompletable() ?? Completable.never()
+            self?.initialzeCompletable() ?? Completable.error(RxError.unknown)
         }
-        .do(onCompleted: { [weak self] in
-            self?.initialized = true
-            self?.connectionState = .CONNECTED
+        .do(onError: { [weak self] error in
+            self?.disconnect()
+        }, onCompleted: { [weak self] in
+            self?.initializeRelay.accept(true)
+            self?.connectionStateRelay.accept(.connected)
         })
     }
     
@@ -74,6 +58,6 @@ open class InitializableBleDevice: BleDevice {
     
     open override func onDisconnected() {
         super.onDisconnected()
-        initialized = false
+        initializeRelay.accept(false)
     }
 }

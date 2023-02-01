@@ -25,13 +25,13 @@ class DeviceTableViewCell: UITableViewCell {
             titleView.text = "\(device?.getName() ?? ""):\(device?.getIdentifier() ?? "Unknown")"
 //            print("connectionState:\(device?.connectionState)")
             switch device?.connectionState {
-            case .CONNECTED:
+            case .connected:
                 connectBtn.setTitle("Disconnect", for: .normal)
                 connectBtn.isEnabled = true
-            case .DISCONNECTED, .DISCONNECTING:
+            case .disconnected, .disconneting:
                 connectBtn.setTitle("Connect", for: .normal)
                 connectBtn.isEnabled = true
-            case .CONNECTING, .DISCOVERING:
+            case .connecting, .discovering:
                 connectBtn.setTitle("Connecting...", for: .normal)
                 connectBtn.isEnabled = false
             default:

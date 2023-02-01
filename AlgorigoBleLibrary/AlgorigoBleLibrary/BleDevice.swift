@@ -10,20 +10,22 @@ import Foundation
 import CoreBluetooth
 import RxSwift
 import RxRelay
+import RxBlocking
 
 open class BleDevice: NSObject {
 
     public enum ConnectionState : String {
-        case CONNECTING = "CONNECTING"
-        case DISCOVERING = "DISCONVERING"
-        case CONNECTED = "CONNECTED"
-        case DISCONNECTED = "DISCONNECTED"
-        case DISCONNECTING = "DISCONNECTING"
+        case connecting = "Connecting"
+        case discovering = "Discovering"
+        case connected = "Connected"
+        case disconnected = "Disconnected"
+        case disconneting = "Disconnecting"
     }
     
-    class DisconnectedError : Error {}
-    class CommunicationError : Error {}
-    
+    public enum BleDeviceError: Error {
+        case disconnectedError
+    }
+
     enum PushData {
         case ReadCharacteristicData(bleDevice: BleDevice, subject: ReplaySubject<Data>, characteristicUuid: String)
         case WriteCharacteristicData(bleDevice: BleDevice, subject: ReplaySubject<Data>, characteristicUuid: String, data: Data)
@@ -94,34 +96,22 @@ open class BleDevice: NSObject {
         }
     }
     
-    var connectionStateSubject = ReplaySubject<ConnectionState>.create(bufferSize: 1)
+    let connectionStateRelay = BehaviorRelay<ConnectionState>(value: .disconnected)
     public var connectionStateObservable: Observable<ConnectionState> {
-        connectionStateSubject.asObserver()
+        connectionStateRelay.asObservable()
     }
-    public internal(set) var connectionState: ConnectionState = .DISCONNECTED {
-        didSet {
-            if (connectionState == .DISCONNECTED) {
-                discoverSubject = PublishSubject<Any>()
-                notificationObservableDic.values.forEach { (tuple) in
-                    tuple.subject.onError(DisconnectedError())
-                }
-            }
-            connectionStateSubject.onNext(connectionState)
-        }
+    public var connectionState: ConnectionState {
+        (try? connectionStateRelay.toBlocking().first()) ?? .disconnected
     }
     public var connected: Bool {
-        return connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.DISCOVERING
+        connectionState == ConnectionState.connected
     }
-    fileprivate var disposable: Disposable! = nil
-    fileprivate var peripheral: CBPeripheral! = nil
-    fileprivate let characteristicSubject = ReplaySubject<CBCharacteristic>.createUnbounded()
+    fileprivate let peripheral: CBPeripheral
+    fileprivate let characteristicRelay = ReplayRelay<CBCharacteristic>.createUnbound()
     fileprivate var characteristicDic = AtomicValue([String: (subject: ReplaySubject<Data>, data: Data)]())
     fileprivate var notificationObservableDic: [String: (observable: Observable<Observable<Data>>, subject: ReplaySubject<Observable<Data>>)] = [:]
     fileprivate var notificationDic: [String: PublishSubject<Data>] = [:]
     fileprivate var discoverSubject = PublishSubject<Any>()
-    fileprivate var discoverCompletable: Completable {
-        return discoverSubject.ignoreElements().asCompletable()
-    }
 
     public required init(_ peripheral: CBPeripheral) {
         self.peripheral = peripheral
@@ -133,18 +123,15 @@ open class BleDevice: NSObject {
     public func connect(autoConnect: Bool = false) -> Completable {
         var dispose = true
         return BluetoothManager.instance.connectDevice(peripheral: peripheral, autoConnect: autoConnect)
-            .concat(discoverCompletable.do(onSubscribe: {
-                self.discover()
-            }))
-            .do(onError: { (error) in
+            .concat(discover())
+            .do(onError: { [weak self] error in
                 dispose = false
-                self.connectionState = .DISCONNECTED
-            }, onCompleted: {
+                self?.connectionStateRelay.accept(.disconnected)
+            }, onCompleted: { [weak self] in
                 dispose = false
-                self.connectionState = .CONNECTED
-            }, onSubscribe: {
-                self.connectionState = .CONNECTING
-            }, onSubscribed: {
+                self?.connectionStateRelay.accept(.connected)
+            }, onSubscribe: { [weak self] in
+                self?.connectionStateRelay.accept(.connecting)
             }, onDispose: {
                 if dispose {
                     self.disconnect()
@@ -171,26 +158,30 @@ open class BleDevice: NSObject {
     
     public func disconnect() {
         _ = disconnectCompletable()
-            .subscribe(onCompleted: {
-                
-            }, onError: { (error) in
+            .subscribe(onError: { (error) in
                 debugPrint("disconnectDevice onError:\(error)")
             })
     }
     
     fileprivate func disconnectCompletable() -> Completable {
         return BluetoothManager.instance.disconnectDevice(peripheral: peripheral)
-            .do(onSubscribe: {
-                self.connectionState = .DISCONNECTING
+            .do(onSubscribe: { [weak self] in
+                self?.connectionStateRelay.accept(.disconneting)
             })
-            .do(onCompleted: {
-                self.onDisconnected()
+            .do(onCompleted: { [weak self] in
+                self?.onDisconnected()
             })
     }
     
-    fileprivate func discover() {
-        connectionState = .DISCOVERING
-        peripheral.discoverServices(nil)
+    fileprivate func discover() -> Completable {
+        discoverRelay
+            .asObservable()
+            .firstOrError()
+            .do(onSubscribe: { [weak self] in
+                self?.connectionStateRelay.accept(.discovering)
+                self?.peripheral.discoverServices(nil)
+            })
+            .asCompletable()
     }
     
     func onReconnected() {
@@ -202,28 +193,24 @@ open class BleDevice: NSObject {
     
     func reconnectCompletable() -> Completable {
         var dispose = true
-        return discoverCompletable.do(onSubscribe: {
-            self.discover()
-        })
-        .do(onError: { (error) in
-            dispose = false
-            self.connectionState = .DISCONNECTED
-        }, onCompleted: {
-            dispose = false
-            self.connectionState = .CONNECTED
-        }, onSubscribe: {
-            self.connectionState = .CONNECTING
-        }, onSubscribed: {
-        }, onDispose: {
-            if dispose {
-                self.disconnect()
-            }
-        })
+        return discover()
+            .do(onError: { [weak self] error in
+                dispose = false
+                self?.connectionStateRelay.accept(.disconnected)
+            }, onCompleted: { [weak self] in
+                dispose = false
+                self?.connectionStateRelay.accept(.connected)
+            }, onSubscribe: { [weak self] in
+                self?.connectionStateRelay.accept(.connecting)
+            }, onDispose: {
+                if dispose {
+                    self.disconnect()
+                }
+            })
     }
     
     open func onDisconnected() {
-        discoverSubject = PublishSubject<Any>()
-        connectionState = .DISCONNECTED
+        connectionStateRelay.accept(.disconnected)
     }
     
     public func getName() -> String? {
@@ -378,13 +365,13 @@ open class BleDevice: NSObject {
     }
     
     fileprivate func getConnectedCompletable() -> Completable {
-        return connectionStateSubject
+        return connectionStateRelay
             .filter { (connectionState) -> Bool in
-                connectionState != .CONNECTING && connectionState != .DISCOVERING
+                connectionState != .connecting && connectionState != .discovering
             }
             .do(onNext: { (connectionState) in
-                if (connectionState != .CONNECTED) {
-                    throw DisconnectedError()
+                if (connectionState != .connected) {
+                    throw BleDeviceError.disconnectedError
                 }
             })
             .firstOrError()
@@ -392,7 +379,7 @@ open class BleDevice: NSObject {
     }
     
     fileprivate func getCharacteristic(uuid: String) -> Single<CBCharacteristic> {
-        return characteristicSubject
+        return characteristicRelay
             .filter({ (characteristic) -> Bool in
                 characteristic.uuid.uuidString == uuid
             })
@@ -416,11 +403,10 @@ open class BleDevice: NSObject {
 extension BleDevice: CBPeripheralDelegate {
     //CBPeripheralDelegate Override Methods
     public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        discoverSubject.onCompleted()
         if let error = error {
             debugPrint("error : peripheral didDiscoverServices: \(peripheral.name ?? peripheral.identifier.uuidString), error: \(error.localizedDescription)")
         } else {
-            self.peripheral = peripheral
+            discoverRelay.accept(1)
             for service in peripheral.services! {
                 peripheral.discoverCharacteristics(nil, for: service)
             }
@@ -429,7 +415,7 @@ extension BleDevice: CBPeripheralDelegate {
     
     public func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         for characteristic in service.characteristics! {
-            characteristicSubject.on(.next(characteristic))
+            characteristicRelay.accept(characteristic)
         }
     }
     
