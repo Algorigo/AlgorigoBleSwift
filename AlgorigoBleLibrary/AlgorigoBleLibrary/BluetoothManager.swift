@@ -52,9 +52,8 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
     fileprivate let initializedSubject = ReplaySubject<CBManagerState>.create(bufferSize: 1)
     fileprivate let connectionStateSubject = PublishSubject<(bleDevice: BleDevice, connectionState: BleDevice.ConnectionState)>()
     fileprivate var scanSubjects = [([String]?, PublishSubject<CBPeripheral>)]()
-    fileprivate var connectSubjects = [CBPeripheral: PublishSubject<Bool>]()
+    fileprivate var connectSubjects = [CBPeripheral: PublishSubject<Any>]()
     fileprivate var disconnectSubjects = [CBPeripheral: PublishSubject<Bool>]()
-    fileprivate var reconnectUUIDs = [UUID]()
     fileprivate var disposeBag = DisposeBag()
     
     override private init() {
@@ -204,7 +203,7 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
         return connectionStateSubject
     }
     
-    internal func connectDevice(peripheral: CBPeripheral, autoConnect: Bool = false) -> Completable {
+    internal func connectDevice(peripheral: CBPeripheral) -> Completable {
         return checkBluetoothStatus()
             .andThen(Completable.deferred({ () -> PrimitiveSequence<CompletableTrait, Never> in
                 if let subject = self.connectSubjects[peripheral] {
@@ -212,29 +211,18 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
                         .ignoreElements()
                         .asCompletable()
                 } else {
-                    let subject = PublishSubject<Bool>()
+                    let subject = PublishSubject<Any>()
                     self.connectSubjects[peripheral] = subject
                     return subject
                         .ignoreElements()
                         .asCompletable()
-                        .do(onCompleted: {
-                            if autoConnect,
-                               !self.reconnectUUIDs.contains(peripheral.identifier) {
-                                self.reconnectUUIDs.append(peripheral.identifier)
-                            }
-                        }, onSubscribe: {
+                        .do(onSubscribe: {
                             self.manager.connect(peripheral, options: nil)
                         }, onDispose: {
                             self.connectSubjects.removeValue(forKey: peripheral)
                         })
                 }
             }))
-    }
-    
-    func getReconnectFlag(peripheral: CBPeripheral) -> Bool {
-        return reconnectUUIDs.contains { uuid in
-            peripheral.identifier == uuid
-        }
     }
     
     func disconnectDevice(peripheral: CBPeripheral) -> Completable {
@@ -250,11 +238,6 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
                     .ignoreElements()
                     .asCompletable()
                     .do(onSubscribe: {
-                        if let index = self.reconnectUUIDs.firstIndex(where: { (uuid) -> Bool in
-                            peripheral.identifier == uuid
-                        }) {
-                            self.reconnectUUIDs.remove(at: index)
-                        }
                         self.manager.cancelPeripheralConnection(peripheral)
                     }, onDispose: {
                         self.disconnectSubjects.removeValue(forKey: peripheral)
@@ -291,9 +274,6 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
             subject.on(.completed)
         } else if let device = deviceDic[peripheral] {
             device.onDisconnected()
-            if reconnectUUIDs.contains(peripheral.identifier) {
-                manager.connect(peripheral, options: nil)
-            }
         }
     }
 }

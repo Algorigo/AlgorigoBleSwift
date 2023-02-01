@@ -171,7 +171,7 @@ extension ViewController : DeviceTableViewCellDelegate {
             device.disconnect()
             self.allTableView.reloadData()
         case .disconnected:
-            _ = device.connect(autoConnect: false)
+            _ = device.connect()
                 .subscribe(on: ConcurrentDispatchQueueScheduler(qos: .background))
                 .observe(on: MainScheduler.instance)
                 .subscribe(onCompleted: {
