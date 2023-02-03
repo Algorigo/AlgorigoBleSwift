@@ -24,6 +24,8 @@ open class BleDevice: NSObject {
     
     public enum BleDeviceError: Error {
         case disconnectedError
+        case notificationActivatedError
+        case characteristicReadingError
     }
 
     enum PushData {
@@ -203,7 +205,16 @@ open class BleDevice: NSObject {
     
     public func readCharacteristic(uuid: String) -> Single<Data> {
         let subject = ReplaySubject<Data>.create(bufferSize: 1)
-        return subject
+        return Completable.deferred {
+            if self.notificationDic.contains(where: { (key, _) in
+                key == uuid
+            }) {
+                return Completable.error(BleDeviceError.characteristicReadingError)
+            } else {
+                return Completable.empty()
+            }
+        }
+            .andThen(subject)
             .do(onSubscribe: {
                 BleDevice.pushQueue.mutate({ pushData in
                     pushData.append(.ReadCharacteristicData(bleDevice: self, subject: subject, characteristicUuid: uuid))
@@ -230,22 +241,31 @@ open class BleDevice: NSObject {
     }
     
     public func setupNotification(uuid: String) -> Observable<Observable<Data>> {
-        if notificationObservableDic[uuid] == nil {
-            var isFirst = true
-            let subject = ReplaySubject<Observable<Data>>.create(bufferSize: 1)
-            notificationObservableDic[uuid] = (
-                observable: subject.do(onSubscribe: {
-                    if (isFirst) {
-                        isFirst = false
-                        self.processNotificationEnableData(subject: subject, characteristicUuid: uuid)
-                    }
-                }, onDispose: {
-                    if (!subject.hasObservers) {
-                        self.disableNotification(uuid: uuid)
-                    }
-                }), subject: subject)
+        return Observable.deferred { [weak self] in
+            guard let this = self else {
+                return Observable.error(RxError.unknown)
+            }
+            
+            if let notificationObservable = this.notificationObservableDic[uuid] {
+                return notificationObservable.observable
+            } else {
+                var isFirst = true
+                let subject = ReplaySubject<Observable<Data>>.create(bufferSize: 1)
+                let observable = subject
+                    .do(onSubscribe: { [weak self] in
+                        if (isFirst) {
+                            isFirst = false
+                            self?.processNotificationEnableData(subject: subject, characteristicUuid: uuid)
+                        }
+                    }, onDispose: { [weak self] in
+                        if (!subject.hasObservers) {
+                            self?.disableNotification(uuid: uuid)
+                        }
+                    })
+                this.notificationObservableDic[uuid] = (observable: observable, subject: subject)
+                return observable
+            }
         }
-        return notificationObservableDic[uuid]!.observable
     }
     
     fileprivate func disableNotification(uuid: String) {
