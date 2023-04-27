@@ -59,7 +59,7 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
     
     override private init() {
         super.init()
-        self.manager = CBCentralManager(delegate: self, queue: nil)
+        self.manager = CBCentralManager(delegate: self, queue: nil, options: [CBCentralManagerOptionShowPowerAlertKey : true])
     }
     
     public func initialize(bleDeviceDelegate: BleDeviceDelegate) {
