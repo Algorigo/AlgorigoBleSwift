@@ -10,9 +10,47 @@ import Foundation
 import CoreBluetooth
 import RxSwift
 import RxRelay
+import NordicWiFiProvisioner_BLE
 
 open class BleDevice: NSObject {
-
+    
+    public struct ProvisioningStatus {
+        public let version: Int
+        public let status: String?
+        public let ssid: String?
+        public let bssid: String?
+        public let auth: String?
+        public let channel: UInt?
+    }
+    
+    public class ProvisioningWifiInfo {
+        internal let wifiInfo: WifiInfo
+        
+        public init(_ wifiInfo: WifiInfo) {
+            self.wifiInfo = wifiInfo
+        }
+        
+        public var ssid: String {
+            return wifiInfo.ssid
+        }
+        
+        public var bssid: String {
+            return wifiInfo.bssid.description
+        }
+        
+        public var bandId: String? {
+            return wifiInfo.band?.description
+        }
+        
+        public var channel: UInt {
+            return wifiInfo.channel
+        }
+        
+        public var auth: String? {
+            return wifiInfo.auth?.description
+        }
+    }
+    
     public enum ConnectionState : String {
         case CONNECTING = "CONNECTING"
         case DISCOVERING = "DISCONVERING"
@@ -23,6 +61,8 @@ open class BleDevice: NSObject {
     
     class DisconnectedError : Error {}
     class CommunicationError : Error {}
+    class DeviceManagerNotInitializedError: Error {}
+    class UnsupportedProvisioningError: Error {}
     
     enum PushData {
         case ReadCharacteristicData(bleDevice: BleDevice, subject: ReplaySubject<Data>, characteristicUuid: String)
@@ -122,8 +162,24 @@ open class BleDevice: NSObject {
     fileprivate var discoverCompletable: Completable {
         return discoverSubject.ignoreElements().asCompletable()
     }
+    fileprivate(set) var deviceManager: DeviceManager?
+    fileprivate var discoveredWifiList: [WifiInfo] = []
+    fileprivate var connectionDelegateWrapper: ConnectionDelegateWrapper?
+    fileprivate var wiFiScannerDelegateWrapper: WiFiScannerDelegateWrapper?
+    fileprivate var provisionDelegateWrapper: ProvisionDelegateWrapper?
+    fileprivate var infoDelegateWrapper: DeviceInfoDelegateWrapper?
+    
+    fileprivate var scanResult: ScanResult?
 
     public required init(_ peripheral: CBPeripheral) {
+        self.peripheral = peripheral
+        super.init()
+        
+        peripheral.delegate = self
+    }
+    
+    public init(peripheral: CBPeripheral, scanResult: ScanResult) {
+        self.scanResult = scanResult
         self.peripheral = peripheral
         super.init()
         
@@ -279,6 +335,226 @@ open class BleDevice: NSObject {
                 }), subject: subject)
         }
         return notificationObservableDic[uuid]!.observable
+    }
+    
+    public func initializeProvisioning() -> Completable {
+        guard let scanResult = self.scanResult else {
+            return Completable.error(UnsupportedProvisioningError())
+        }
+        self.deviceManager = DeviceManager(scanResult: scanResult)
+        
+        return Completable.create { completable in
+            self.connectionDelegateWrapper = ConnectionDelegateWrapper(
+                onConnected: {
+                    //                    completable(.completed)
+                    // 연결 성공 시 상태값 읽기 시도
+                    _ = self.getProvisioningStatus()
+                        .subscribe(onSuccess: { _ in
+                            completable(.completed)
+                        }, onFailure: { error in
+                            completable(.error(error))
+                        })
+                },
+                onDisconnected: {
+                    completable(.error(DisconnectedError()))
+                },
+                onFailed: { error in
+                    completable(.error(error))
+                },
+                onStateChange: { state in }
+            )
+            
+            self.deviceManager?.connectionDelegate = self.connectionDelegateWrapper
+            self.deviceManager?.connect()
+            
+            return Disposables.create()
+        }
+    }
+    
+    public func scanWifiList() -> Single<[ProvisioningWifiInfo]> {
+        guard let deviceManager = self.deviceManager else {
+            return Single.error(DeviceManagerNotInitializedError())
+        }
+        
+        let discoveredSsids = AtomicSet<String>()
+        
+        return Observable<ProvisioningWifiInfo>.create { observer in
+            self.wiFiScannerDelegateWrapper = WiFiScannerDelegateWrapper(
+                onDiscovered: { wifi, _ in
+                    guard !wifi.ssid.isEmpty else { return }
+                    
+                    if discoveredSsids.insert(wifi.ssid) {
+                        let result = ProvisioningWifiInfo(wifi)
+                        observer.onNext(result)
+                    }
+                },
+                onStart: {},
+                onStop: {
+                    observer.onCompleted()
+                }
+            )
+            
+            do {
+                deviceManager.wifiScannerDelegate = self.wiFiScannerDelegateWrapper
+                try deviceManager.startScan()
+            } catch {
+                observer.onError(error)
+            }
+            
+            return Disposables.create {
+                do {
+                    try deviceManager.stopScan()
+                } catch {
+                    debugPrint("Failed to stop scan: \(error)")
+                }
+            }
+        }
+        .scan(into: [ProvisioningWifiInfo]()) { acc, wifi in
+            if acc.first(where: { $0.ssid == wifi.ssid }) == nil {
+                acc.append(wifi)
+            }
+        }
+        .filter { !$0.isEmpty }
+        .debounce(.milliseconds(500), scheduler: MainScheduler.instance)
+        .take(1)
+        .asSingle()
+        .do(onDispose: { [weak self] in
+            guard let self = self, let deviceManager = self.deviceManager else { return }
+            do {
+                try deviceManager.stopScan()
+                debugPrint("Scan stopped successfully")
+            } catch {
+                debugPrint("Failed to stop scan: \(error)")
+            }
+        })
+    }
+    
+    public func startProvisioning(provisioningWifiInfo: ProvisioningWifiInfo, password: String) -> Completable {
+        guard let deviceManager = self.deviceManager else {
+            return Completable.error(DeviceManagerNotInitializedError())
+        }
+        
+        return Completable.create { completable in
+            self.provisionDelegateWrapper = ProvisionDelegateWrapper(
+                onProvisionResult: { _ in },
+                onForgetResult: { _ in },
+                onStateChange: { state in
+                    switch state {
+                    case .connected:
+                        completable(.completed)
+                    case .connectionFailed(let error):
+                        completable(.error(error))
+                    case .disconnected:
+                        completable(.error(DisconnectedError()))
+                    default:
+                        break
+                    }
+                }
+            )
+            
+            deviceManager.provisionerDelegate = self.provisionDelegateWrapper
+            
+            do {
+                try deviceManager.setConfig(wifi: provisioningWifiInfo.wifiInfo, passphrase: password, volatileMemory: false)
+            } catch {
+                completable(.error(error))
+            }
+            
+            return Disposables.create()
+        }
+    }
+    
+    public func cleanProvisioning() -> Completable {
+        guard let deviceManager = self.deviceManager else {
+            return Completable.error(DeviceManagerNotInitializedError())
+        }
+        
+        return Completable.create { completable in
+            self.provisionDelegateWrapper = ProvisionDelegateWrapper(
+                onProvisionResult: { _ in },
+                onForgetResult: { result in
+                    switch result {
+                    case .success:
+                        completable(.completed)
+                    case .failure(let error):
+                        completable(.error(error))
+                    }
+                },
+                onStateChange: { _ in }
+            )
+            
+            deviceManager.provisionerDelegate = self.provisionDelegateWrapper
+            
+            do {
+                try deviceManager.forgetConfig()
+            } catch {
+                completable(.error(error))
+            }
+            
+            return Disposables.create()
+        }
+    }
+    
+    public func getProvisioningStatus() -> Single<ProvisioningStatus> {
+        guard let deviceManager = self.deviceManager else {
+            return Single.error(DeviceManagerNotInitializedError())
+        }
+        
+        return Single.create { single in
+            var versionValue: Int?
+            var statusValue: DeviceStatus?
+            
+            func tryEmit() {
+                guard let version = versionValue, let status = statusValue else { return }
+                
+                let statusStr = status.state.map { String(describing: $0) }
+                let ssid = status.provisioningInfo?.ssid
+                let bssid = status.provisioningInfo?.bssid.description
+                let auth = status.provisioningInfo?.auth?.description
+                let channel = status.provisioningInfo?.channel
+                
+                let result = ProvisioningStatus(
+                    version: version,
+                    status: statusStr,
+                    ssid: ssid,
+                    bssid: bssid,
+                    auth: auth,
+                    channel: channel
+                )
+                
+                single(.success(result))
+            }
+            
+            self.infoDelegateWrapper = DeviceInfoDelegateWrapper(
+                onVersionReceived: { result in
+                    if case .success(let value) = result {
+                        versionValue = value
+                        tryEmit()
+                    } else if case .failure(let error) = result {
+                        single(.failure(error))
+                    }
+                },
+                onDeviceStatusReceived: { result in
+                    if case .success(let value) = result {
+                        statusValue = value
+                        tryEmit()
+                    } else if case .failure(let error) = result {
+                        single(.failure(error))
+                    }
+                }
+            )
+            
+            deviceManager.infoDelegate = self.infoDelegateWrapper
+            
+            do {
+                try deviceManager.readVersion()
+                try deviceManager.readDeviceStatus()
+            } catch {
+                single(.failure(error))
+            }
+            
+            return Disposables.create()
+        }
     }
     
     fileprivate func disableNotification(uuid: String) {
@@ -457,5 +733,16 @@ extension BleDevice: CBPeripheralDelegate {
     }
     
     public func peripheral(_ peripheral: CBPeripheral, didWriteValueFor descriptor: CBDescriptor, error: Error?) {
+    }
+}
+
+final class AtomicSet<T: Hashable> {
+    private var set: Set<T> = []
+    private let lock = NSLock()
+    
+    func insert(_ value: T) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return set.insert(value).inserted
     }
 }

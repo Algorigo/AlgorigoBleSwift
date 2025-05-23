@@ -10,14 +10,19 @@ import Foundation
 import CoreBluetooth
 import RxSwift
 import RxRelay
-
+import NordicWiFiProvisioner_BLE
 
 public protocol BleDeviceDelegate {
     func createBleDevice(peripheral: CBPeripheral) -> BleDevice?
+    func createBleDeviceWithProvisioing(peripheral: CBPeripheral, scanResult: ScanResult) -> BleDevice?
 }
 extension BleDeviceDelegate {
     func createBleDeviceOuter(peripheral: CBPeripheral) -> BleDevice? {
         return createBleDevice(peripheral: peripheral)
+    }
+    
+    func createBleDeviceWithProvisioingOuter(peripheral: CBPeripheral, scanResult: ScanResult) -> BleDevice? {
+        return createBleDeviceWithProvisioing(peripheral: peripheral, scanResult: scanResult)
     }
 }
 
@@ -42,6 +47,10 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
         public func createBleDevice(peripheral: CBPeripheral) -> BleDevice? {
             BleDevice(peripheral)
         }
+        
+        public func createBleDeviceWithProvisioing(peripheral: CBPeripheral, scanResult: ScanResult) -> BleDevice? {
+            BleDevice(peripheral: peripheral, scanResult: scanResult)
+        }
     }
     
     public static let instance = BluetoothManager()
@@ -56,6 +65,7 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
     fileprivate var disconnectSubjects = [CBPeripheral: PublishSubject<Bool>]()
     fileprivate var reconnectUUIDs = [UUID]()
     fileprivate var disposeBag = DisposeBag()
+    fileprivate var provisioningScanDelegateWrapper: ScannerDelegateWrapper?
     
     override private init() {
         super.init()
@@ -66,6 +76,34 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
         self.bleDeviceDelegate = bleDeviceDelegate
     }
     
+    public func scanAndMatchProvisioningDevices(withServices services: [String]? = nil) -> Observable<[BleDevice]> {
+        let scanResultsStream = scanDeviceWithProvisioning()
+            .scan(into: [UUID: ScanResult]()) { map, scanResult in
+                map[scanResult.id] = scanResult
+            }
+            .startWith([:])
+        
+        let peripheralsStream = scanDeviceInner(withServices: services)
+            .scan(into: [UUID: CBPeripheral]()) { map, peripheral in
+                map[peripheral.identifier] = peripheral
+            }
+            .startWith([:])
+            
+        
+        return Observable.combineLatest(peripheralsStream, scanResultsStream)
+            .map { peripheralMap, scanResultMap in
+                var matchedDevicesMap = [UUID: BleDevice]()
+                
+                for (uuid, peripheral) in peripheralMap {
+                    if let scan = scanResultMap[uuid] {
+                        matchedDevicesMap[uuid] = self.onBluetoothDeviceFoundWithProvisioning(peripheral: peripheral, scanResult: scan)
+                    }
+                }
+                
+                return Array(matchedDevicesMap.values)
+            }
+    }
+
     public func scanDevice(withServices services: [String]? = nil) -> Observable<[BleDevice]> {
         var bleDeviceList = [BleDevice]()
         var lastCount = 0
@@ -125,6 +163,27 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
             }))
     }
     
+    private func scanDeviceWithProvisioning(withServices services: [String]? = nil) -> Observable<ScanResult> {
+        return Observable.create { observer in
+            self.provisioningScanDelegateWrapper = ScannerDelegateWrapper(
+                onDeviceDiscovered: { scanResult in
+                    print("Scanned: \(scanResult)")
+                    observer.onNext(scanResult)
+                },
+                onScanComplete: {
+                    observer.onCompleted()
+                }
+            )
+
+            let bleScanner = Scanner(delegate: self.provisioningScanDelegateWrapper)
+            bleScanner.startScan()
+
+            return Disposables.create {
+                bleScanner.stopScan()
+            }
+        }
+    }
+    
     public func retrieveDevice(identifiers: [UUID]) -> Single<[BleDevice]> {
         return retrieveDeviceInner(identifiers: identifiers)
                 .map { [unowned self] (peripherals) -> [BleDevice] in
@@ -169,6 +228,28 @@ public class BluetoothManager : NSObject, CBCentralManagerDelegate {
     
     fileprivate func onBluetoothDeviceFound(_ peripheral: CBPeripheral) -> BleDevice? {
         return deviceDic[peripheral] ?? createBleDevice(peripheral)
+    }
+    
+    fileprivate func onBluetoothDeviceFoundWithProvisioning(peripheral: CBPeripheral, scanResult: ScanResult) -> BleDevice? {
+        return deviceDic[peripheral] ?? createBleDevcieWithProvisioning(peripheral: peripheral, scanResult: scanResult)
+    }
+    
+    fileprivate func createBleDevcieWithProvisioning(peripheral: CBPeripheral, scanResult: ScanResult) -> BleDevice? {
+        let device = bleDeviceDelegate.createBleDeviceWithProvisioingOuter(peripheral: peripheral, scanResult: scanResult)
+        if let _device = device {
+            deviceDic[peripheral] = _device
+            _device.connectionStateObservable
+                .subscribe { [weak self] (event) in
+                    switch event {
+                    case .next(let state):
+                        self?.connectionStateSubject.onNext((bleDevice: _device, connectionState: state))
+                    default:
+                        break
+                    }
+                }
+                .disposed(by: disposeBag)
+        }
+        return device
     }
     
     fileprivate func createBleDevice(_ peripheral: CBPeripheral) -> BleDevice? {

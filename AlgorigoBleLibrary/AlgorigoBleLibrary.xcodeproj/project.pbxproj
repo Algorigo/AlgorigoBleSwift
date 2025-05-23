@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		04F93B9E2DE004DA00B773F3 /* NordicWiFiProvisioner-BLE in Frameworks */ = {isa = PBXBuildFile; productRef = 04F93B9D2DE004DA00B773F3 /* NordicWiFiProvisioner-BLE */; };
+		04F93BA92DE448B800B773F3 /* ProvisioningDelegateWrappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04F93BA82DE448B800B773F3 /* ProvisioningDelegateWrappers.swift */; };
 		1143C5AD251C43F60030A119 /* InitializableBleDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1143C5AC251C43F60030A119 /* InitializableBleDevice.swift */; };
 		EE236CCD24A5CA790012C04E /* AlgorigoBleLibrary.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EE236CC324A5CA780012C04E /* AlgorigoBleLibrary.framework */; };
 		EE236CD224A5CA790012C04E /* AlgorigoBleLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE236CD124A5CA790012C04E /* AlgorigoBleLibraryTests.swift */; };
@@ -31,6 +32,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		04F93BA82DE448B800B773F3 /* ProvisioningDelegateWrappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisioningDelegateWrappers.swift; sourceTree = "<group>"; };
 		1143C5AC251C43F60030A119 /* InitializableBleDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InitializableBleDevice.swift; sourceTree = "<group>"; };
 		EE236CC324A5CA780012C04E /* AlgorigoBleLibrary.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = AlgorigoBleLibrary.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		EE236CC724A5CA780012C04E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -92,6 +94,7 @@
 				EE236D4024A60D280012C04E /* BleDevice.swift */,
 				1143C5AC251C43F60030A119 /* InitializableBleDevice.swift */,
 				EE236D4324A60D330012C04E /* FirstOrError.swift */,
+				04F93BA82DE448B800B773F3 /* ProvisioningDelegateWrappers.swift */,
 				EE236CC724A5CA780012C04E /* Info.plist */,
 			);
 			path = AlgorigoBleLibrary;
@@ -228,6 +231,7 @@
 				EE3AB1A724FC80F600886D42 /* AlgorigoBleLibrary.swift in Sources */,
 				EE236D4624A60D330012C04E /* FirstOrError.swift in Sources */,
 				1143C5AD251C43F60030A119 /* InitializableBleDevice.swift in Sources */,
+				04F93BA92DE448B800B773F3 /* ProvisioningDelegateWrappers.swift in Sources */,
 				EE3AB1A824FC80F600886D42 /* BluetoothManager.swift in Sources */,
 				EE236D4124A60D280012C04E /* BleDevice.swift in Sources */,
 			);

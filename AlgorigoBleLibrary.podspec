@@ -21,6 +21,6 @@ spec.source_files  = "AlgorigoBleLibrary/AlgorigoBleLibrary/*.swift"
 spec.dependency 'RxSwift', '~> 6.5.0'
 spec.dependency 'RxRelay', '~> 6.5.0'
 
-spec.dependency 'NordicWiFiProvisioner-BLE'
+spec.dependency 'NordicWiFiProvisioner-BLE', '~> 2.1.1'
 
 end
