@@ -376,14 +376,18 @@ open class BleDevice: NSObject {
             return Single.error(DeviceManagerNotInitializedError())
         }
         
-        let discoveredSsids = AtomicSet<String>()
+        let discoveredSsids = AtomicValue(Set<String>())
         
         return Observable<ProvisioningWifiInfo>.create { observer in
             self.wiFiScannerDelegateWrapper = WiFiScannerDelegateWrapper(
                 onDiscovered: { wifi, _ in
                     guard !wifi.ssid.isEmpty else { return }
                     
-                    if discoveredSsids.insert(wifi.ssid) {
+                    let inserted = discoveredSsids.acquire { set -> Bool in
+                        return set.insert(wifi.ssid).inserted
+                    }
+                    
+                    if inserted {
                         let result = ProvisioningWifiInfo(wifi)
                         observer.onNext(result)
                     }
@@ -733,16 +737,5 @@ extension BleDevice: CBPeripheralDelegate {
     }
     
     public func peripheral(_ peripheral: CBPeripheral, didWriteValueFor descriptor: CBDescriptor, error: Error?) {
-    }
-}
-
-final class AtomicSet<T: Hashable> {
-    private var set: Set<T> = []
-    private let lock = NSLock()
-    
-    func insert(_ value: T) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return set.insert(value).inserted
     }
 }
