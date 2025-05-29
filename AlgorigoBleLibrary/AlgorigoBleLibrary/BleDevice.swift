@@ -16,7 +16,7 @@ open class BleDevice: NSObject {
     
     public struct ProvisioningStatus {
         public let version: Int
-        public let status: String?
+        public let state: NordicWiFiProvisioner_BLE.ConnectionState?
         public let ssid: String?
         public let bssid: String?
         public let auth: String?
@@ -449,7 +449,32 @@ open class BleDevice: NSObject {
                     case .connectionFailed(let error):
                         completable(.error(error))
                     case .disconnected:
-                        completable(.error(DisconnectedError()))
+                        _ = self.getProvisioningStatus()
+                            .retry(when: { (errors: Observable<Error>) in
+                                errors.enumerated().flatMap { attempt, error -> Observable<Int> in
+                                    if attempt >= 9 {
+                                        return Observable.error(error)
+                                    }
+                                    return Observable<Int>.just(attempt).delay(.seconds(1), scheduler: MainScheduler.instance)
+                                }
+                            })
+                            .subscribe(onSuccess: { provisioningStatus in
+                                guard
+                                    let state = provisioningStatus.state,
+                                    let ssid = provisioningStatus.ssid
+                                else {
+                                    completable(.error(DisconnectedError()))
+                                    return
+                                }
+                                
+                                if state == .connected && ssid == provisioningWifiInfo.wifiInfo.ssid {
+                                    completable(.completed)
+                                } else {
+                                    completable(.error(DisconnectedError()))
+                                }
+                            }, onFailure: { error in
+                                completable(.error(error))
+                            })
                     default:
                         break
                     }
@@ -511,7 +536,7 @@ open class BleDevice: NSObject {
             func tryEmit() {
                 guard let version = versionValue, let status = statusValue else { return }
                 
-                let statusStr = status.state.map { String(describing: $0) }
+                let state = status.state
                 let ssid = status.provisioningInfo?.ssid
                 let bssid = status.provisioningInfo?.bssid.description
                 let auth = status.provisioningInfo?.auth?.description
@@ -519,7 +544,7 @@ open class BleDevice: NSObject {
                 
                 let result = ProvisioningStatus(
                     version: version,
-                    status: statusStr,
+                    state: state,
                     ssid: ssid,
                     bssid: bssid,
                     auth: auth,
