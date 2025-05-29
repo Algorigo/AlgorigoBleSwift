@@ -161,6 +161,10 @@ extension RetrieveViewController: UITableViewDataSource, UITableViewDelegate {
 }
 
 extension RetrieveViewController: DeviceTableViewCellDelegate {
+    func handleCellClick(device: BleDevice) {
+        
+    }
+    
     func handleConncectBtn(device: BleDevice) {
         switch device.connectionState {
         case .CONNECTED:

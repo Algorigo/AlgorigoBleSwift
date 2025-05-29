@@ -93,7 +93,8 @@ class ViewController: UIViewController {
     
     private func startScanWithServices() {
         if disposableDevice == nil {
-            disposableDevice = BluetoothManager.instance.scanDevice(withServices: [ViewController.UUID_SERVICE])
+//            disposableDevice = BluetoothManager.instance.scanDevice(withServices: [ViewController.UUID_SERVICE])
+            disposableDevice = BluetoothManager.instance.scanAndMatchProvisioningDevices()
                 .subscribe(on: ConcurrentDispatchQueueScheduler(qos: .background))
                 .observe(on: MainScheduler.instance)
                 .do(onSubscribe: { [weak self] in
@@ -165,6 +166,52 @@ extension ViewController : UITableViewDataSource, UITableViewDelegate {
 }
 
 extension ViewController : DeviceTableViewCellDelegate {
+    func handleCellClick(device: BleDevice) {
+        _ = device.initializeProvisioning()
+            .subscribe(on: ConcurrentDispatchQueueScheduler(qos: .background))
+            .observe(on: MainScheduler.instance)
+            .do(onCompleted: {
+                print("Device connected")
+            })
+            .andThen(device.getProvisioningStatus())
+            .do(onSuccess: { status in
+                print("Device Status: \(status)")
+            })
+            .flatMap { _ in
+                device.scanWifiList()
+                    .flatMap { results in
+                        print("Wi-Fi Scan Results:")
+                        results.forEach { result in
+                            print("- SSID: \(result.ssid)")
+                        }
+                        
+                        return Single.just(results)
+                    }
+            }
+            .flatMapCompletable { results in
+                if let targetWifi = results.first(where: { $0.ssid == "algorigo_tp5G" }) {
+                    print("Found target SSID: \(targetWifi.ssid), starting provisioning")
+                    return device.cleanProvisioning()
+                        .do(onCompleted: {
+                            print("Cleaning completed")
+                        })
+                        .andThen(device.startProvisioning(provisioningWifiInfo: targetWifi, password: "dkfrhflrh24223#"))
+                        .do(onCompleted: {
+                            print("Provisioning completed for SSID: \(targetWifi.ssid)")
+                        })
+                } else {
+                    print("SSID 'algorigo_tp5G' not found. Skipping provisioning.")
+                    return Completable.empty()
+                }
+            }
+        
+            .subscribe(onCompleted: {
+                print("All BLE Tests Completed Successfully")
+            }, onError: { error in
+                print("BLE Test Error: \(error.localizedDescription)")
+            })
+    }
+    
     func handleConncectBtn(device: BleDevice) {
         switch device.connectionState {
         case .CONNECTED:
