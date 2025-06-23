@@ -12,7 +12,7 @@ spec.license      = { :type => 'MIT', :file => 'LICENSE.md' }
 spec.author       = { "author" => "rouddy@naver.com" }
 spec.documentation_url = "https://github.com/Algorigo/AlgorigoBleSwift"
 
-spec.ios.deployment_target = '10.0'
+spec.ios.deployment_target = '11.0'
 
 spec.swift_version = '5.1'
 spec.source       = { :git => "https://github.com/Algorigo/AlgorigoBleSwift.git", :tag => "#{spec.version}" }
