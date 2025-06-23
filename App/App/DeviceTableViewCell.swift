@@ -11,6 +11,7 @@ import AlgorigoBleLibrary
 
 protocol DeviceTableViewCellDelegate {
     func handleConncectBtn(device: BleDevice)
+    func handleCellClick(device: BleDevice)
 }
 
 class DeviceTableViewCell: UITableViewCell {
@@ -43,12 +44,23 @@ class DeviceTableViewCell: UITableViewCell {
     override func awakeFromNib() {
         super.awakeFromNib()
         // Initialization code
+        
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleCellClick))
+          self.addGestureRecognizer(tapGesture)
     }
 
     override func setSelected(_ selected: Bool, animated: Bool) {
         super.setSelected(selected, animated: animated)
-
-        // Configure the view for the selected state
+        
+    }
+    
+    @objc private func handleCellClick() {
+        guard let device = device else { return }
+        
+        if device.connectionState == .CONNECTED {
+            print("handleCellClick:\(device.getName() ?? device.getIdentifier())")
+            delegate.handleCellClick(device: device)
+        }
     }
     
     @IBAction func handleConnectBtn() {
