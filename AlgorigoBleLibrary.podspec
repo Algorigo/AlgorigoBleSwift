@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
 spec.name         = "AlgorigoBleLibrary"
-spec.version      = "0.2.5"
+spec.version      = "0.2.7"
 spec.summary      = "Swift Ble Library using RxSwift by Algorigo"
 spec.description  = <<-DESC
 Swift Ble Library using RxSwift by Algorigo
